@@ -1,0 +1,11 @@
+[Unit]
+Description= RTPEngine proxy for RTP and other media streams
+After=network.target iptables.service redis.service syslog.target
+# iptables.service is required only if the RTPEngine uses its kernel module. redis.service is required if the Redis server is working on the same machine along with the RTPEngine
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rtpengine --interface=int/PRIVATE-IP!PUBLIC-IP --interface=ext/PRIVATE-IP!PUBLIC-IP --listen-ng=127.0.0.1:12221 --pidfile=/var/run/rtpengine --table=-1 --dtls-passive -f -m 10000 -M 20000 --log-level=1 --log-facility=local1
+
+[Install]
+WantedBy=multi-user.target

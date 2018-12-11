@@ -1,0 +1,53 @@
+kamailio](!)
+type=endpoint
+context=from-internal
+transport=transport-tcp
+media_address=ASTERISK-PUBLIC-IP
+disallow=all
+allow=ulaw
+allow=vp8
+allow=h264
+allow=t140
+direct_media=no
+force_rport=yes
+rewrite_contact=yes
+rtp_symmetric=yes
+force_avp=yes
+ice_support=yes
+use_avpf=yes
+dtmf_mode=auto ;rfc4733
+media_encryption=dtls    ; Determines whether res_pjsip will use and enforce
+dtls_verify=fingerprint ; Verify that the provided peer certificate is valid (default: "")
+dtls_fingerprint=SHA-1
+dtls_rekey=0   ; Interval at which to renegotiate the TLS session and rekey
+dtls_cert_file=/etc/asterisk/keys/asterisk.pem
+dtls_ca_file=/etc/asterisk/keys/ca.crt
+dtls_setup=actpass
+rtcp_mux=yes
+trust_id_inbound=yes
+trust_id_outbound=yes
+media_use_received_transport=yes
+message_context=internal-im
+timers=no
+
+[kamailio](kamailio)
+aors=kamailio
+
+[kamailio]
+type=aor
+
+[kamailio]
+type=identify  ; Must be of type identify (default: "")
+endpoint=kamailio
+match=KAMAILIO-PRIVATE-IP
+
+# *************************IMPORTANT **********************
+#Add the Proxy's 'contact' to each exention
+e.g.
+contact=sip:extention@KAMAILIO-PRIVATE-IP
+
+#Add outbound_proxy to each 'endpoint' that the proxy will be contacting
+#note: lr=>loose routing
+e.g.
+outbound_proxy=sip:KAMAILIO-PRIVATE-IP\;lr
+

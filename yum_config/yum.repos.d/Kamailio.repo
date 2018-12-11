@@ -1,0 +1,8 @@
+[kamailio]
+name=RPMs for Kamailio on CentOS 7
+type=rpm-md
+baseurl=http://rpm.kamailio.org/stable/CentOS_7/
+gpgcheck=1
+gpgkey=http://rpm.kamailio.org/stable/CentOS_7/repodata/repomd.xml.key
+enabled=1
+

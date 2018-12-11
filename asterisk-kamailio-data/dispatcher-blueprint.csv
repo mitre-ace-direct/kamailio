@@ -1,0 +1,2 @@
+0|1|sip:ASTERISK-PRIVATE-IP:ASTERISK-PORT|0|0||Endpoint: Asterisk 
+0|1|sip:ASTERISK-BACKUP-PRIVATE-IP:ASTERISK-BACKUP-PORT|0|0||Endpoint: Asterisk backup
