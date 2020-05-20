@@ -1,16 +1,16 @@
-kamailio](!)
+[kamailio](!)
 type=endpoint
 context=from-internal
 transport=transport-tcp
-media_address=172.21.1.177
+media_address=KAMAILIO-PRIVATE-IP
 disallow=all
 allow=ulaw
-allow=vp8
 allow=h264
+allow=vp8
 allow=t140
 direct_media=no
 force_rport=yes
-rewrite_contact=yes
+rewrite_contact=no
 rtp_symmetric=yes
 force_avp=yes
 ice_support=yes
@@ -20,7 +20,7 @@ media_encryption=dtls    ; Determines whether res_pjsip will use and enforce
 dtls_verify=fingerprint ; Verify that the provided peer certificate is valid (default: "")
 dtls_fingerprint=SHA-1
 dtls_rekey=0   ; Interval at which to renegotiate the TLS session and rekey
-dtls_cert_file=/etc/asterisk/keys/asterisk.pem
+dtls_cert_file=/etc/asterisk/keys/cert.pem
 dtls_ca_file=/etc/asterisk/keys/ca.crt
 dtls_setup=actpass
 rtcp_mux=yes
@@ -39,15 +39,14 @@ type=aor
 [kamailio]
 type=identify  ; Must be of type identify (default: "")
 endpoint=kamailio
-match=172.21.1.77
+match=KAMAILIO-PRIVATE-IP
 
 # *************************IMPORTANT **********************
-#Add the Proxy's 'contact' to each exention
-e.g.
-contact=sip:extention@172.21.1.77
-
+1)
 #Add outbound_proxy to each 'endpoint' that the proxy will be contacting
+#Exception: webrtc and aceapp endpoints
 #note: lr=>loose routing
 e.g.
-outbound_proxy=sip:172.21.1.77\;lr
+outbound_proxy=sip:KAMAILIO-PRIVATE-IP\;lr
 
+NOTE: Use KAMAILIO-PRIVATE-IP or KAMAILIO-FQDN

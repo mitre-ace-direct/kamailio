@@ -1,8 +1,7 @@
 #!/bin/bash
 
 #----------------------------------------------------------------------------
-# Author   : Steve Wilkins, and re-use of functions developed by Connor McCann,
-#            Said Masoud, and, of course Google
+# Author   : MITRE
 # Company  : MITRE
 # Project  : Ace Direct SIP Server for Asterisk 
 # Date     : 12 Mar 2018
@@ -46,6 +45,7 @@ asterisk_private_ip=0
 asterisk_private_ip_backup=0
 asterisk_port=5060
 asterisk_fqdn=""
+asterisk_key=""
 database_installed=false
 database_present=false
 database_port=13306
@@ -57,10 +57,10 @@ kamailio_tls_port=443
 #kamailio_dual_port=5061
 kamailio_make="pass"
 kamailio_installed=false
-kamailio_configuredd=false
+kamailio_configured=false
 mysql_base_version=5
 pw=""
-
+use_local_version_rtpengine="false"
 debug_mode="true"
 
 ###########################################################################
@@ -80,13 +80,13 @@ function clone_url() {
     else
        echo
        print_message "Info" "Trying again to clone, using user su"
-       sudo git clone ssh://git@$1
+        git clone ssh://git@$1
        if [ $? -eq 0 ]; then
           print_message "Success" "Asterisk was successfully cloned"
        else
           echo
           print_message "Info" "Trying again to clone, using https"
-          sudo git clone https://$USER@$1
+           git clone https://$USER@$1
           if [ $? -eq 0 ]; then
              print_message "Success" "Asterisk was successfully cloned"
           else
@@ -108,15 +108,15 @@ function configure_db() {
        #set the port n the corresponding configuration file to the port entered
        #my.cnf is the configuration file for both MySQL and MariaDB
        if [ -e /etc/$bkup_sql_cnf_file ];then
-          sudo rm -f /etc/$bkup_sql_cnf_file
+           rm -f /etc/$bkup_sql_cnf_file
        fi
        if [ -e /etc/my.cnf ]; then
           mv -f /etc/my.cnf /etc/$bkup_sql_cnf_file
        fi
        sed "s/port[ ]*=[ ]*PORT/port = $database_port/g" $sql_cnf_file > /etc/my.cnf
     elif [[ "$1" == "MySQL" ]] ; then
-       sudo sed -i '/\[mysqld\]/a validate_password_policy=LOW' /etc/my.cnf
-       sudo sed -i '/\[mysqld\]/a port = ${database_port}' /etc/my.cnf
+        sed -i '/\[mysqld\]/a validate_password_policy=LOW' /etc/my.cnf
+        sed -i '/\[mysqld\]/a port = ${database_port}' /etc/my.cnf
     elif [[ "$1" == "Mongo" ]] ; then
     :
     else
@@ -262,6 +262,7 @@ function validate_db_password() {
     unset charcount
 
     echo "Please (re)enter the root database password: "
+    echo "IMPORTANT...Password cannot be blank(empty)"
     stty -echo
 
     charcount=0
@@ -305,12 +306,32 @@ print_message "Info" "This process can be stopped at any time using Ctrl-C"
 # fail if the script is not run as root
 # Source: AD_asterisk_install.sh
 #
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin:/usr/local/sbin:usr/local/bin:/usr/lib64:/usr/local/lib64
 if [ "$(id -u)" != "0" ]; then
   echo
   print_message "Error" "This script must be run as root" 
   echo
   exit 
 fi
+
+#Determine Distro
+shopt -s nocasematch
+distro=$(cat /etc/*-release|grep PRETTY_NAME)
+
+if [[ $distro =~ 'centos' ]]; then
+        echo "Distro:Centos"
+        linux_distro="RH"
+elif [[ $distro =~ 'Red' ]]; then
+        echo "Distro:Red Hat"
+        linux_distro="RH"
+elif [[ $distro =~ 'Ubuntu' ]]; then
+        echo "Distro:Debian"
+        linux_distro="DEB"
+elif [[ $distro =~ 'Amazon' ]]; then
+        echo "Distro:Amazon"
+        linux_distro="AMZ"
+fi
+shopt -u nocasematch
 
 #
 # fail if selinux is enabled
@@ -375,8 +396,9 @@ while true; do
 done
 
 # Get the Port for the Kamailio Server to use
-nc -z 127.0.0.1 $kamailio_port
+nc -z 0.0.0.0 $kamailio_port
 if [ $? -eq 0 ]; then
+   unset kamailio_port
    kamailio_port="15060"
 fi
 echo
@@ -396,7 +418,7 @@ while true; do
     fi
   fi
   #determine if this port is being used
-  nc -z 127.0.0.1 $kamailio_port
+  nc -z 0.0.0.0 $kamailio_port
   if [ $? -eq 0 ]; then
      print_message "Error" "The port selected is in use, select a different port"
      continue
@@ -406,7 +428,7 @@ while true; do
 done
 
 # Get the TLS Port for the Kamailio Server to use
-nc -z 127.0.0.1 $kamailio_tls_port
+nc -z 0.0.0.0 $kamailio_tls_port
 if [ $? -eq 0 ]; then
    kamailio_tls_port="8443"
    print_message "Notify" "TLS port 443 is busy so it is being set to 8443"
@@ -435,7 +457,7 @@ while true; do
     fi
   fi
   #determine if this port is being used
-  nc -z 127.0.0.1 $kdport 
+  nc -z 0.0.0.0 $kdport 
   if [ $? -eq 0 ]; then
      print_message "Error" "The port selected is in use, select a different port"
      continue
@@ -619,30 +641,64 @@ else
 fi
 if [ $noproxy == "true" ]; then
 # if proxy not set and required, then temporarily set proxy
-   print_message "Notify" "Temporarily setting proxy environment"
-   cd ..
-   pwdn=$(pwd)
-   if [ -s $SCRIPT_HOME/tmp_proxy ]; then
-      assigned_proxy=$(head -1 $SCRIPT_HOME/tmp_proxy)
-      http_proxy=$assigned_proxy
-      https_proxy=$assigned_proxy
-   elif [ -s "/etc/environment" ]; then
-      http_proxy=$(head -5 /etc/environment |tail -1)
-      temphttp=${http_proxy#*=}
-      http_proxy=$temphttp
-      https_proxy=$(head -3 /etc/environment |tail -1)
-      temphttps=${https_proxy#*=}
-      https_proxy=$temphttps
-   else
-      read -p "No proxy has been detected. Enter proxy(IP:Port) or leave blank if proxy is not required:" newproxy
-      http_proxy=http://${newproxy}
-      https_proxy=http://${newproxy}
+
+   print_message "Notify" "No firewall http proxy was located, if you choose to install one, verify the file tmp_proxy is correct or be prompted for it (IP:PORT)."
+   read -p "Install http proxy? [Y/N/]:" install_http_proxy
+   if [ "$install_http_proxy" == "Y" ] || [ "$install_http_proxy" == "y" ]; then
+      # if proxy not set and required, then temporarily set proxy
+      print_message "Info" "Temporarily setting proxy environment"
+      proxyset=$( grep -q "http_proxy" tmp_proxy; [ $? -eq 0 ] && echo "yes" || echo "no" )
+      envproxyset=$( grep -q "http_proxy" /etc/environment; [ $? -eq 0 ] && echo "yes" || echo "no" )
+      if [ -s $SCRIPT_HOME/tmp_proxy ] && [ $proxyset == "yes" ]; then
+         assigned_proxy=$(head -1 $SCRIPT_HOME/tmp_proxy)
+         http_proxy=$assigned_proxy
+         https_proxy=$assigned_proxy
+         noproxy="false"
+      elif [ -s "/etc/environment" ] && [ $envproxyset == "yes" ]; then
+         sudo rm -f tmp_proxy
+         grep -r "http_proxy" /etc/environment > tmp_proxy
+         sudo chmod 777 tmp_proxy
+         noproxy="false"
+      else
+         read -p "No firewall http proxy has been detected. Enter (IP:Port) or leave blank if proxy is not required:" newproxy
+         if [ ! -z "$newproxy" ]; then
+            http_proxy=http://${newproxy}
+            https_proxy=http://${newproxy}
+            sudo rm tmp_proxy
+            echo http://$newproxy>tmp_proxy
+            sudo chmod 777 tmp_proxy
+            noproxy="false"
+            export http_proxy
+            export https_proxy
+         fi
+      fi
+
+      if [ $noproxy == "false" ]; then
+         if [[ "$(hostname)"==*"task3acrdemo"* ]]; then
+            no_proxy=$(echo 172.21.1.{1..255} | sed 's/ /,/g')
+            export no_proxy
+         elif [[ "$(hostname)"==*"acedirect"* ]]; then
+            no_proxy=$(echo 10.190.4.{1..255} | sed 's/ /,/g')
+            export no_proxy
+         fi
+         print_message "Notify" "proxy set to:$https_proxy"
+      fi
+      echo
    fi
-   no_proxy=$(echo 172.21.1.{1..255} | sed 's/ /,/g')
-   export http_proxy
-   export https_proxy
-   export no_proxy
-   print_message "Notify" "Proxy has been set to: $https_proxy"
+fi
+
+#Verify the required yum conf has correct proxy set, if needed
+if [ $noproxy == "false" ]; then
+   print_message "Info" "Setting yum.conf proxy"
+   sudo -E ./yum_config/update_yum.sh
+   if [ $? -eq 0 ]; then
+      print_message "Success" "yum has correct proxy and has been cleaned"
+      echo
+   else
+      print_message "Error" "yum proxy not set"
+      print_message "Info" "Continuing with caution"
+      echo
+   fi
 fi
 
 #
@@ -655,7 +711,7 @@ dbver=$(mysql --version 2>/dev/null)
 
 database_server_detected=false
 if [[ "${dbver=}" != *Ver* ]]; then
-   read -p "No database detected, install Database? [Y/N]:" do_db_install
+   read -p "No database detected(Kamailio may require a DB), install Database? [Y/N]:" do_db_install
    if [ -z $do_db_install ] || ([ "$do_db_install" == "Y" ] || [ "$do_db_install" == "y" ]); then
       install_db=false
       while true;do
@@ -700,23 +756,31 @@ if [[ "${dbver=}" != *Ver* ]]; then
          echo "  You will be using port:" $database_port " for the database $database"
          echo "  Installing database..."
          if [ "$database" == "MariaDB" ]; then
-            sudo yum-config-manager --enable mariadb
-            yum install -y mariadb mariadb-server mariadb-client
+            yum-config-manager --enable mariadb
+            yum install -y mariadb-server mariadb-client mariadb-shared
          else
             #wget https://dev.mysql.com/get/mysql57-community-release-el7-7.noarch.rpm
             #yum install -y mysql57-community-release-el7-7.noarch.rpm
             #rpm -ivh mysql80-community-release-el7-1.noarch.rpm
-            sudo yum-config-manager --disable mariadb
-            if [ "$debug_mode" == "true" ]; then
-               sudo yum localinstall -y https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm
-               sudo yum install -y mysql-community-server
-               #sudo yum localinstall -y https://dev.mysql.com/get/mysql80-community-release-el7-1.noarch.rpm
-               #sudo yum install -y mysql-community-server --disablerepo=mysql80-community  --enablerepo=mysql57-community
+            yum-config-manager --disable mariadb
+            if [[ $distro =~ 'Amazon' ]]; then
+               if [ "$debug_mode" == "true" ]; then
+                  yum install -y mysql-server
+               else
+                  yum install -y mysql-server >/dev/null
+               fi
             else
-               sudo yum localinstall -y https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm >/dev/null
-               sudo yum install -y mysql-community-server >/dev/null
-               #sudo yum localinstall -y https://dev.mysql.com/get/mysql80-community-release-el7-1.noarch.rpm >/dev/null
-               #sudo yum install -y mysql-community-server --disablerepo=mysql80-community  --enablerepo=mysql57-community >/dev/null
+               if [ "$debug_mode" == "true" ]; then
+                  yum localinstall -y https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm
+                  yum install -y mysql-community-server
+                  #yum localinstall -y https://dev.mysql.com/get/mysql80-community-release-el7-1.noarch.rpm
+                  #yum install -y mysql-community-server --disablerepo=mysql80-community  --enablerepo=mysql57-community
+               else
+                  yum localinstall -y https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm >/dev/null
+                  yum install -y mysql-community-server >/dev/null
+                  #yum localinstall -y https://dev.mysql.com/get/mysql80-community-release-el7-1.noarch.rpm >/dev/null
+                  #yum install -y mysql-community-server --disablerepo=mysql80-community  --enablerepo=mysql57-community >/dev/null
+               fi
             fi
          fi
          if [ $? -eq 0 ]; then
@@ -734,6 +798,13 @@ if [[ "${dbver=}" != *Ver* ]]; then
                print_message "Info" "Starting and Enabling database..."
                chkconfig mysqld on
                service mysqld start
+               if [ $? -eq 0 ]; then
+                  print_message "Info" "Database is enable and started"
+               else
+                  #try to fix the issue
+                  sudo rm -rf /var/lib/mysql
+                  service mysqld start
+               fi
             fi
             status=$?
             if [ "$debug_mode" == "true" ];then echo "Current Database status:$status";fi
@@ -784,7 +855,7 @@ if [[ "${dbver=}" != *Ver* ]]; then
                   if [ "$database" == "MySQL" ]; then
                      print_message "Info" "Upgrading MySQL"
                      mysql_upgrade -u root >/dev/null
-                     sudo service mysqld restart
+                     service mysqld restart
                   fi
                #fi
                print_message "Success" "Database Server Installation Complete"
@@ -862,14 +933,20 @@ while [ ${invalid_answer} == true ]; do
     echo
     cd /usr/src
     print_message "Info" "Cloning Kamailio"
-    sudo rm -rf /usr/src/kamailio-backup
-    sudo mv /usr/src/kamailio kamailio-backup
+     rm -rf /usr/src/kamailio-backup
+     mv /usr/src/kamailio kamailio-backup
     if [ "$debug_mode" == "true" ];then
-       git clone https://github.com/kamailio/kamailio.git kamailio
+       git clone --depth 1 --no-single-branch https://github.com/kamailio/kamailio kamailio
+       #git clone https://github.com/kamailio/kamailio.git kamailio
     else
-       git clone https://github.com/kamailio/kamailio.git kamailio >/dev/null
+       git clone --depth 1 --no-single-branch https://github.com/kamailio/kamailio kamailio >/dev/null
+       #git clone https://github.com/kamailio/kamailio.git kamailio >/dev/null
     fi
     cd /usr/src/kamailio
+
+    #Set Kamailio Branch
+    git checkout -b 5.2 origin/5.2
+
     if [ ! -d /usr/local/etc/kamailio/kamailio.cfg.bkup ] ; then
       cp -f /usr/local/etc/kamailio/kamailio.cfg /usr/local/etc/kamailio/kamailio.cfg.bkup
     fi
@@ -883,12 +960,12 @@ while [ ${invalid_answer} == true ]; do
     print_message "Info" "Make sure the development libraries are installed"
     if [ "$database" == "MySQL" ]; then
        if [ "$debug_mode" == "true" ];then echo "debug: retrieving database support libraries for MySQL";fi
-       sudo yum-config-manager --disable mariadb
+        yum-config-manager --disable mariadb
        if [ "$debug_mode" == "true" ];then
-          #sudo yum install -y mysql-devel libmnl libmnl-devel
-          sudo yum install -y mysql-devel libmnl libmnl-devel
+          # yum install -y mysql-devel libmnl libmnl-devel
+           yum install -y mysql-devel libmnl libmnl-devel
        else
-          sudo yum install -y mysql-devel libmnl libmnl-devel >/dev/null
+           yum install -y mysql-devel libmnl libmnl-devel >/dev/null
        fi
        #fix issue in source code where my_bool is being used, it is no longer valid => use bool in its place
        if [ $mysql_base_version -eq 8 ]; then
@@ -898,14 +975,14 @@ while [ ${invalid_answer} == true ]; do
           cd /usr/src/kamailio
        fi
     else
-       sudo yum-config-manager --enable mariadb
+        yum-config-manager --enable mariadb
        if [ "$debug_mode" == "true" ];then echo "debug: retrieving database support libraries for MariaDB";fi
        if [ "$debug_mode" == "true" ];then
-          sudo yum install -y mariadb-devel
-          sudo yum install -y MariaDB-shared
+           yum install -y mariadb-devel
+           yum install -y mariadb-shared
        else
-          sudo yum install -y mariadb-devel >/dev/null
-          sudo yum install -y MariaDB-shared >/dev/null
+           yum install -y mariadb-devel >/dev/null
+           yum install -y mariadb-shared >/dev/null
        fi
     fi
 
@@ -958,9 +1035,12 @@ while [ ${invalid_answer} == true ]; do
     sed -i "s/KAMAILIO-PRIVATE-IP/${kamailio_private_ip}/g" kamailio_tmp.cfg
     sed -i "s/KAMAILIO-PUBLIC-IP/${kamailio_public_ip}/g" kamailio_tmp.cfg 
     sed -i "s/FQDN/${kamailio_fqdn}/g" kamailio_tmp.cfg
+    sed -i "s/ASTERISK-FQDN/${asterisk_fqdn}/g" kamailio_tmp.cfg
     sed -i "s/KAMAILIO-DB-PW/${pw//&/\\&}/g" kamailio_tmp.cfg
     sed -i "s/ASTERISK-DB-PW/${pw//&/\\&}/g" kamailio_tmp.cfg
     sed -i "s/KAMAILIO-TLS-PORT/$kamailio_tls_port/g" kamailio_tmp.cfg
+    read -p "Enter Asterisk Secret Key:" asterisk_key 
+    sed -i "s/SECRET-KEY/$asterisk_key/g" kamailio_tmp.cfg
     mv -f kamailio_tmp.cfg /usr/local/etc/kamailio/kamailio.cfg
     cp -f check_kamailio_cfg.sh /usr/local/etc/kamailio
     cp -f restart-kamailio.sh /usr/local/etc/kamailio
@@ -970,7 +1050,12 @@ while [ ${invalid_answer} == true ]; do
     cp -f pjsip.conf-additions-blueprint pjsip.conf-additions
     sed -i "s/ASTERISK-PUBLIC-IP/${asterisk_public_ip}/g" pjsip.conf-additions
     sed -i "s/KAMAILIO-PRIVATE-IP/${kamailio_private_ip}/g" pjsip.conf-additions
-    sudo cp -f pjsip.conf-additions /etc/asterisk/pjsip.conf-kamailio-configurations
+    #cp -f pjsip.conf-additions /etc/asterisk/pjsip.conf-kamailio-configurations
+
+    #if asterisk is installed on the same Server, then set kamailio's IP
+    if [ -f /etc/asterisk/pjsip.conf ]; then
+        sed -i "s/192.168.0.21/${kamailio_private_ip}/g" /etc/asterisk/pjsip.conf
+    fi
 
     echo
     if [ "$kamailio_make" == "fail" ]; then
@@ -999,28 +1084,55 @@ if [ -z $install_media_proxy ] || ([ "$install_media_proxy" == "Y" ] || [ "$inst
    if [ "$function_call_status" == "1" ] && [ ! -a /etc/systemd/system/rtpengine.service ] ; then
       yum install -y  iptables-devel kernel-devel kernel-headers xmlrpc-c-devel
       yum install -y "kernel-devel-uname-r == $(uname -r)"
-      cd /usr/local/src
-      git clone https://github.com/sipwise/rtpengine.git
+      if [ "$use_local_version_rtpengine" == "true" ]; then
+         print_message "Info" "Using Local rtpengine.tar"
+         #use known working tarball instead of newest version because of issues with new version
+         cp -f rtpengine.tar /usr/local/src
+         cd /usr/local/src
+         rm -rf rtpengine
+         tar -xvf rtpengine.tar
+      else
+         print_message "Info" "Using git rtpengine.tar"
+         yum install perl-IPC-Cmd -y
+         cd /usr/local/src
+         git clone https://github.com/sipwise/rtpengine.git
+         #git clean -f -x -d
+      fi
       cd /usr/local/src/rtpengine/daemon 
-      rpm -Uvh http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm
+      #rpm -Uvh http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm
+      yum -y install epel-release && rpm -Uvh http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm
+      export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin:/usr/local/sbin:usr/local/bin:/usr/lib64
+      yum install spandsp-devel spandsp
+      yum install perl-CPAN
       yum install -y ffmpeg ffmpeg-devel
+      #yum install -y ffmpeg ffmpeg-devel.x86_64
       yum install -y hiredis-devel
+      if [ "$debug_mode" == "true" ];then echo "debug: make rtpengine";fi
       make
+      if [ "$debug_mode" == "true" ];then echo "debug: rtpengine make complete";fi
       cp rtpengine /usr/local/bin/
       cd /usr/local/src/rtpengine/kernel-module 
+      if [ "$debug_mode" == "true" ];then echo "debug: make kernel-module";fi
       make 
+      if [ "$debug_mode" == "true" ];then echo "debug: kernel-module make complete";fi
+      if [ "$debug_mode" == "true" ];then echo "debug: replace kernel module";fi
       rmmod xt_RTPENGINE.ko
       insmod xt_RTPENGINE.ko
+      if [ "$debug_mode" == "true" ];then echo "debug: kernel module replaced";fi
       cd /usr/local/src/rtpengine/iptables-extension 
+      if [ "$debug_mode" == "true" ];then echo "debug: make iptables-extenstion";fi
       make
+      if [ "$debug_mode" == "true" ];then echo "debug: iptables-extenstion make complete";fi
       cp libxt_RTPENGINE.so /lib64/xtables/
       #configure rtpengine.service with public and private IP Addresses of Kamailio Server
       cd $SCRIPT_HOME
       cp rtpengine.service.blueprint rtpengine.service.tmp
       sed -i "s/PRIVATE-IP/$kamailio_private_ip/g" rtpengine.service.tmp
       sed -i "s/PUBLIC-IP/$kamailio_public_ip/g" rtpengine.service.tmp
+      if [ "$debug_mode" == "true" ];then echo "debug: install rtpengine service";fi
       mv rtpengine.service.tmp /etc/systemd/system/rtpengine.service
       chmod 755 /etc/systemd/system/rtpengine.service
+      if [ "$debug_mode" == "true" ];then echo "debug: rtpengine service installed";fi
    else
       print_message "Info" "rtpengine service is already available"
    fi 
@@ -1087,26 +1199,53 @@ if [ $database_installed == true ]; then
     [yY] ) 
       sed -i "s/# DBENGINE=MYSQL/DBENGINE=MYSQL/g" /usr/local/etc/kamailio/kamctlrc
       sed -i "s/# SIP_DOMAIN=kamailio.org/SIP_DOMAIN=$kamailio_private_ip/g" /usr/local/etc/kamailio/kamctlrc
-      sed -i "s/# DBRWPW=\"kamailiorw\"/DBRWPW=\"2tZTp&b49#TSFYc2\"/g" /usr/local/etc/kamailio/kamctlrc
+      sed -i "s/# DBRWPW=\"kamailiorw\"/DBRWPW=\"$pw\"/g" /usr/local/etc/kamailio/kamctlrc
       sed -i "s/# CHARSET=\"latin1\"/CHARSET=\"latin1\"/g" /usr/local/etc/kamailio/kamctlrc
 
       #Create main kamailio database and tables
       if [ ! -d /var/lib/mysql/kamailio ] ; then
         print_message "Notify"  "Creating kamailio database using $database"
         kamdbctl create
-        print_message "Success"  "kamailio database has been created"
+        if [ "$?" -eq "0" ]; then
+           print_message "Success"  "kamailio database has been created"
+        else
+           /usr/local/sbin/kamdbctl create
+           if [ "$?" -eq "0" ]; then
+              print_message "Success"  "kamailio database has been created"
+           else
+              print_message "Error"  "kamdbctl was not located, kamilio databse could not be updated"
+           fi
+        fi
+
+        # set password
+        if [ "$debug_mode" == "true" ];then echo "debug: setting password in tables";fi
+        cp create_additional_kamailio_tables_mariadb_blueprint.sql create_additional_kamailio_tables_mariadb.sql
+        cp create_additional_kamailio_tables_blueprint.sql create_additional_kamailio_tables.sql
+        cp create_asterisk_db_and_tables_mariadb_blueprint.sql create_asterisk_db_and_tables_mariadb.sql
+        cp create_asterisk_db_and_tables_blueprint.sql create_asterisk_db_and_tables.sql
+        cp mysql_change_password_policy_blueprint.sql  mysql_change_password_policy.sql
+        sed -i "s/DBPW/${pw}/g" create_asterisk_db_and_tables.sql
+        sed -i "s/DBPW/${pw}/g" create_additional_kamailio_tables_mariadb.sql
+        sed -i "s/DBPW/${pw}/g" create_asterisk_db_and_tables_mariadb.sql
+        sed -i "s/DBPW/${pw}/g" mysql_change_password_policy.sql
+        #sed -i "s/DBPW/${pw}/g" asterisk-kamailio-data/Data/upload_data.sql
+        sed -i "s/DBPW/${pw}/g" create_additional_kamailio_tables.sql
+
         #create additional kamailio tables and give db privileges
         if [ "$debug_mode" == "true" ];then echo "debug: creating additional kamailio tables";fi
         if [ "$database" == "MySQL" ]; then
            print_message "Info"  "Creating additional kamailio tables using MySQL"
            mysql -u root <create_additional_kamailio_tables.sql >/dev/null
+           dbrslt=$?
         elif [ "$database" == "MariaDB" ]; then
            print_message "Info"  "Creating additional kamailio tables using MariaDB"
            mysql -u root <create_additional_kamailio_tables_mariadb.sql >/dev/null
+           dbrslt=$?
         else
            print_message "Error" "Could not create kamailio tables (Invalid Database)"
+           dbrslt=1
         fi
-        if [ $? -eq 0 ]; then
+        if [ $dbrslt -eq 0 ]; then
            print_message "Success" "kamailio tables have been created"
         else
            print_message "Error" "Could not create kamailio tables"
@@ -1155,9 +1294,13 @@ if [ $database_installed == true ]; then
     read -p "Insert default data into required tables [Y/N(continue with installation)/A(abort)]:" answer15
     case $answer15 in
     [yY] ) 
+      #read -p "Enter Asterisk Secret Key:" asterisk_key 
       print_message "Notify"  "Databases were located and data is being inserted into kamailio, and asterisk tables"
-      if [ -d $WORKING_DIR/asterisk-kamailio-data/Data ] ; then
+      if [ -d $WORKING_DIR/asterisk-kamailio-data ] ; then
         cd $WORKING_DIR/asterisk-kamailio-data
+        mkdir -p Data
+        #cp the upload sql script to Data dir.
+        cp -f upload_data_blueprint.sql Data/upload_data.sql
         #update dispatcher table with correct IP's/Ports
         cp -f dispatcher-blueprint.csv dispatcher.csv
         sed -i "s/ASTERISK-PRIVATE-IP/$asterisk_private_ip/g" dispatcher.csv 
@@ -1169,6 +1312,7 @@ if [ $database_installed == true ]; then
         cp -f sipusers-blueprint.csv sipusers.csv
         sed -i "s/KAMAILIO-PRIVATE-IP/$kamailio_private_ip/g" sipusers.csv 
         sed -i "s/KAMAILIO-PORT/$kamailio_port/g" sipusers.csv 
+        sed -i "s/SECRET-KEY/$asterisk_key/g" sipusers.csv 
         #sed -i "s/KAMAILIO-DUAL-PORT/$kamailio_dual_port/g" sipusers.csv 
         mv -f sipusers.csv Data/sipusers.csv
         #update domain table with proxy domain
@@ -1176,11 +1320,14 @@ if [ $database_installed == true ]; then
         sed -i "s/KAMAILIO-DOMAIN/$kamailio_fqdn/g" domain.csv 
         mv -f domain.csv Data/domain.csv
 	#insert into trusted table kamailio and Asterisk IP's
+        cp trusted-blueprint.csv Data/trusted.csv
         grep -q -F '0|$asterisk_private_ip|ANY|\N|\N|\N|0|Asterisk' Data/trusted.csv || echo "0|$asterisk_private_ip|ANY|\N|\N|\N|0|Asterisk" >> Data/trusted.csv
-        grep -q -F '0|$kamailio_private_ip|ANY|\N|\N|\N|0|Asterisk' Data/trusted.csv || echo "0|$kamailio_private_ip|ANY|\N|\N|\N|0|Asterisk" >> Data/trusted.csv
+        grep -q -F '0|$kamailio_private_ip|ANY|\N|\N|\N|0|Asterisk' Data/trusted.csv || echo "0|$kamailio_private_ip|ANY|\N|\N|\N|0|Kamailio" >> Data/trusted.csv
+        grep -q -F '0|$asterisk_public_ip|ANY|\N|\N|\N|0|Asterisk' Data/trusted.csv || echo "0|$asterisk_public_ip|ANY|\N|\N|\N|0|Asterisk" >> Data/trusted.csv
+        grep -q -F '0|$kamailio_public_ip|ANY|\N|\N|\N|0|Asterisk' Data/trusted.csv || echo "0|$kamailio_public_ip|ANY|\N|\N|\N|0|Kamailio" >> Data/trusted.csv
         cd Data
         # process main script to insert data into tables
-        if [ "$debug_mode" == "true" ];then echo "debug: insertering default data into tables";fi
+        if [ "$debug_mode" == "true" ];then echo "debug: inserting default data into tables";fi
         mysql -u root <upload_data.sql >/dev/null
         if [ $? -eq 0 ]; then
            print_message "Success" "Kamailio tables have been populated"
@@ -1189,7 +1336,7 @@ if [ $database_installed == true ]; then
            error_exists=true
         fi
       else
-        print_message "Warning"  "Could not locate Data directory which contains data scripts"
+        print_message "Warning"  "Could not locate asterisk-kamailio-data directory which contains data scripts"
       fi
       invalid_answer=false
       ;;
@@ -1238,6 +1385,9 @@ unset MYSQL_PWD
 
 echo
 print_message "Success" " Installation Process is Complete!"
+echo
+
+read -p "The Following IMORTANT Notes are crucial to coniguration...Please Read Carefully!" cont
 
 echo
 echo
@@ -1245,7 +1395,7 @@ echo "+-------------------------------------------------------------------------
 echo "+                                     *** IMPORTANT ***                                           +"
 echo "+                                  Read NOTE 1, and NOTE 2                                        +"
 echo "+-------------------------------------------------------------------------------------------------+"
-echo
+echo "+                                                                                                 +"
 echo "+  NOTE 1: pjsip.conf must be changed to add kamailio end-point, outbound proxy, and contact      +"
 echo "+                                                                                                 +"
 echo "+  Example -                                                                                      +"
@@ -1272,7 +1422,7 @@ echo "+  media_encryption=dtls                                                  
 echo "+  dtls_verify=fingerprint                                                                        +"
 echo "+  dtls_fingerprint=SHA-1                                                                         +"
 echo "+  dtls_rekey=0                                                                                   +"
-echo "+  dtls_cert_file=/etc/asterisk/keys/asterisk.pem                                                 +"
+echo "+  dtls_cert_file=/etc/asterisk/keys/cert.pem                                                     +"
 echo "+  dtls_ca_file=/etc/asterisk/keys/ca.crt                                                         +"
 echo "+  dtls_setup=actpass                                                                             +"
 echo "+  rtcp_mux=yes                                                                                   +"
@@ -1294,17 +1444,20 @@ echo "+  type=identify                                                          
 echo "+  endpoint=kamailio                                                                              +"
 echo "+  match=$kamailio_private_ip                                                                     +"
 echo "+                                                                                                 +"
-echo "+  IMPORTANT! All user contacts must point to the proxy server                                    +"
-echo "+  [30001](aor-single-reg)                                                                        +"
-echo "+  contact=sip:30001@${kamailio_private_ip}:${kamailio_port}                                      +"
-echo "+  etc...                                                                                         +"
-echo "+                                                                                                 +"
 echo "+  IMPORTANT! All endpoints with outbound activity must add the outbound_proxy option             +"
+echo "+  EXCEPTION: endpoint-webrtc, and endpoint endpoint-aceapp                                       +"
 echo "+  example: outbound proxy with loose routing(lr)                                                 +"
 echo "+  outbound_proxy=sip:${kamailio_private_ip}\;lr                                                  +"
+echo "+                                                                                                 +"
+echo "+  The Following is not required when using Media-Server (Kurento)                                +"
+echo "+  IMPORTANT! All extensions which connect through proxy require contact to the proxy             +"
+echo "+  example: contact=sip:30001@FQDN:5060                                                           +"
+echo "+                                                                                                 +"
+echo "+                                                                                                 +"
 echo "+-------------------------------------------------------------------------------------------------+"
 
 echo "+-------------------------------------------------------------------------------------------------+"
+echo "+                                                                                                 +"
 echo "+  NOTE 2: database entries must be created for certain tables in asterisk and kamailio.          +"
 echo "+          A directory called asterisk-kamailio-data was createded under the working              +"
 echo "+          directory.  In this directory are table dumps that can be used as bacic                +"
@@ -1318,19 +1471,24 @@ echo "+                                                                         
 echo "+  kamailio:domain – In this table add the domains of the Proxy servers used in the               +"
 echo "+                    dispatcher table.                                                            +"
 echo "+                                                                                                 +"
-echo "+  asterisk:sipusers – In this table, add all users that will be registering in Kamailio          +"
-echo "+                                                                                                 +"
 echo "+  kamailio:address – In this table, add all ip-addresses for servers that will be communicating  +"
 echo "+  with Asterisk and Kamailio (If authentication is being used)                                   +"
 echo "+                                                                                                 +"
 echo "+  kamailio:trusted – In this table add, all the ip-addresses of trusted servers.                 +"
 echo "+  This will make sure that HOMER security does not stop traffic from a server in this list.      +"
 echo "+                                                                                                 +"
+echo "+  IMPORTANT!                                                                                     +"
+echo "+  asterisk:sipusers – In this table, add all users that will be registering in Kamailio          +"
+echo "+                                                                                                 +"
+echo "+  asterisk:sipregs – In this table, enter Agent/VATRP endpoint number and the default            +"
+echo "+  Asterisk Server that this endpoint is connected to                                             +"
+echo "+                                                                                                 +"
 echo "+-------------------------------------------------------------------------------------------------+"
 
 echo
 echo
-print_message "Info" "(See file /etc/asterisk/pjsip.conf-additions for a template of above pjsip.conf required changes)"
+print_message "Info" "(See file pjsip.conf-additions* for a templetes of above pjsip.conf required changes)"
+print_message "Info" "(There is example of pjsip.conf with/without media server)"
 print_message "Info" "(See Document - 'Kamailio Installation and Configuration' for futher details about Installation)"
 echo
 
@@ -1343,12 +1501,8 @@ while [ $invalid_answer == true ]; do
   read -p "Start Kamailio? [Y/N]" answer17
   case $answer17 in
   [yY] ) 
-    if [ ! -d /etc/asterisk/keys/asterisk.pem ]; then
-       mkdir -p /etc/asterisk/keys
-       cp $SCRIPT_HOME/keys/asterisk.pem /etc/asterisk/keys
-    fi
-    if [ -d /etc/asterisk/keys ]; then
-       chmod 644 /etc/asterisk/keys/asterisk.pem
+    if [ -d /etc/ssl ]; then
+       chmod 644 /etc/ssl/cert.pem
        print_message "Notify" "=> Starting Kamailio"
        service kamailio start
        ps -auxw | grep -P '\b'kamailio'(?!-)\b' > /dev/null
@@ -1359,7 +1513,9 @@ while [ $invalid_answer == true ]; do
           echo "          - Make sure Asterisk or another process is not running on a same port that was chosen for Kamailio"
           echo "          -   suspect ports => 443, 8443, 5060"
           echo "          - A port being used by Kamailio is blocked, verify firewall"
-          echo "          - The key (/etc/asterisk/keys/asterisk.pem) pointed to by tls in Kamailio.cfg has incorrect permissions"
+          echo "          - The cert directory is missing(/etc/ssl/)"
+          echo "          - cert.pem or key.pem are is missing in /etc/ssl"
+          echo "          - The key (/etc/ssl/cert.pem) pointed to by tls in Kamailio.cfg has incorrect permissions"
           echo "            kamailio user needs read permission to asterisk.pem (640) "
           echo "              => Once resloved, run 'service kamailio start' or 'systemctl start kamailio'"
           echo
@@ -1369,7 +1525,7 @@ while [ $invalid_answer == true ]; do
        fi
        invalid_answer=false
     else
-       print_message "Warning" "Asterisk certificates are missing (/etc/asterisk/keys), cannot start Kamailio"
+       print_message "Warning" "Asterisk certificates are missing (/etc/ssl), cannot start Kamailio"
        error_exists=true
        invalid_answer=false
     fi

@@ -1,3 +1,10 @@
 bkup/
+proxy-install-scripts.tar
+rtpengine.tar
 keys/
+keys
 test*
+tmp.sh
+kamailio.cfg-pre-consumer
+rtpengine-systemd/
+pjsip.conf-additions

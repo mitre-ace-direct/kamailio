@@ -1,2 +1,15 @@
-0|30001|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|30001|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|30001||\N|\N|1qaz1qaz
-0|90001|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90001|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90001||\N|\N|1qaz1qaz
+0|30001|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|30001|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|30001||\N|\N|SECRET-KEY
+0|30002|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|30002|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|30002||\N|\N|SECRET-KEY
+0|30003|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|30003|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|30003||\N|\N|SECRET-KEY
+0|30004|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|30004|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|30004||\N|\N|SECRET-KEY
+0|30005|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|30005|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|30005||\N|\N|SECRET-KEY
+0|90001|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90001|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90001||\N|\N|SECRET-KEY
+0|90002|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90002|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90002||\N|\N|SECRET-KEY
+0|90003|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90003|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90003||\N|\N|SECRET-KEY
+0|90004|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90004|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90004||\N|\N|SECRET-KEY
+0|90005|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90005|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90005||\N|\N|SECRET-KEY
+0|90006|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90006|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90006||\N|\N|SECRET-KEY
+0|90007|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90007|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90007||\N|\N|SECRET-KEY
+0|90008|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90008|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90008||\N|\N|SECRET-KEY
+0|90009|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90009|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90009||\N|\N|SECRET-KEY
+0|90010|dynamic|no|peer|\N|\N|\N|\N|\N|yes|yes||\N|\N|90010|||\N| ||\N|KAMAILIO-PRIVATE-IP|\N|\N|\N|\N|\N|\N|\N|\N||\N|\N|\N|| |KAMAILIO-PORT|\N|0|0|90010||\N|\N|SECRET-KEY

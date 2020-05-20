@@ -21,8 +21,10 @@ CREATE TABLE IF NOT EXISTS `sip_trace` (
 
 INSERT INTO version VALUES("sip_trace",4);
 
-GRANT ALL PRIVILEGES ON kamailio.* TO 'asterisk'@'%' IDENTIFIED BY '2tZTp&b49#TSFYc2';
-GRANT ALL PRIVILEGES ON kamailio.* TO 'kamailio'@'%' IDENTIFIED BY '2tZTp&b49#TSFYc2';
+GRANT ALL PRIVILEGES ON *.* TO 'asterisk'@'%' IDENTIFIED BY 'DBPW';
+GRANT ALL PRIVILEGES ON *.* TO 'kamailio'@'%' IDENTIFIED BY 'DBPW';
+GRANT ALL PRIVILEGES ON *.* TO 'asterisk'@'localhost' IDENTIFIED BY 'DBPW';
+GRANT ALL PRIVILEGES ON *.* TO 'kamailio'@'localhost' IDENTIFIED BY 'DBPW';
 
 ALTER TABLE trusted ADD comment VARCHAR(20);
 

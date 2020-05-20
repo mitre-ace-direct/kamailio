@@ -2,7 +2,7 @@ use kamailio;
 
 CREATE TABLE IF NOT EXISTS `sip_trace` (
   `id` bigint(20) NOT NULL auto_increment,
-  `date` datetime NOT NULL default '0000-00-00 00:00:00',
+  `date` datetime NOT NULL default CURRENT_TIMESTAMP,
   `callid` varchar(254) NOT NULL default '',
   `traced_user` varchar(128) NOT NULL default '',
   `msg` text NOT NULL,
