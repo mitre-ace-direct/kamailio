@@ -5,6 +5,7 @@ keys/
 keys
 test*
 tmp.sh
+tmp_test_proxy.sh
 kamailio.cfg-pre-consumer
 rtpengine-systemd/
 pjsip.conf-additions

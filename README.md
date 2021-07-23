@@ -12,6 +12,8 @@ The installation scripts requires the following:
   Note: Kamailio will default to the IP Address of the Server it is being installed on and ports will default to 5060.
   Note: Asterisk port will default to 5060.
 
+* The Proxy requires a database to operate.  It is recommeded to install a local database.
+
 * If installing MySQL, the Port for MySQL is also required (Default port is 3306, use 13306 if it is desired to use a sql gui).
 
 

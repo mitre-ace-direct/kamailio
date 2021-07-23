@@ -639,7 +639,7 @@ else
    #check_status="error"
    print_message "Warning" "https_proxy is not set"
 fi
-if [ $noproxy == "true" ]; then
+if [ "$noproxy" == "true" ]; then
 # if proxy not set and required, then temporarily set proxy
 
    print_message "Notify" "No firewall http proxy was located, if you choose to install one, verify the file tmp_proxy is correct or be prompted for it (IP:PORT)."
@@ -711,7 +711,8 @@ dbver=$(mysql --version 2>/dev/null)
 
 database_server_detected=false
 if [[ "${dbver=}" != *Ver* ]]; then
-   read -p "No database detected(Kamailio may require a DB), install Database? [Y/N]:" do_db_install
+   print_message "Info" "The Proxy requires a database to operate.  It is recommeded to install a local database."
+   read -p "No database detected(Kamailio requires a DB), install Database? [Y/N]:" do_db_install
    if [ -z $do_db_install ] || ([ "$do_db_install" == "Y" ] || [ "$do_db_install" == "y" ]); then
       install_db=false
       while true;do
@@ -757,6 +758,10 @@ if [[ "${dbver=}" != *Ver* ]]; then
          echo "  Installing database..."
          if [ "$database" == "MariaDB" ]; then
             yum-config-manager --enable mariadb
+            if [[ $distro =~ 'Amazon' ]]; then
+               cp -f yum_config/yum.repos.d/MariaDB.repo /etc/yum.repos.d/.
+               yum install mysql-libs
+            fi
             yum install -y mariadb-server mariadb-client mariadb-shared
          else
             #wget https://dev.mysql.com/get/mysql57-community-release-el7-7.noarch.rpm
@@ -975,14 +980,14 @@ while [ ${invalid_answer} == true ]; do
           cd /usr/src/kamailio
        fi
     else
-        yum-config-manager --enable mariadb
+       yum-config-manager --enable mariadb
        if [ "$debug_mode" == "true" ];then echo "debug: retrieving database support libraries for MariaDB";fi
        if [ "$debug_mode" == "true" ];then
-           yum install -y mariadb-devel
-           yum install -y mariadb-shared
+           yum install -y mariadb-devel MariaDB-devel
+           yum install -y mariadb-shared MariaDB-shared
        else
-           yum install -y mariadb-devel >/dev/null
-           yum install -y mariadb-shared >/dev/null
+           yum install -y mariadb-devel MariaDB-devel >/dev/null
+           yum install -y mariadb-shared MariaDB-shared >/dev/null
        fi
     fi
 
@@ -990,7 +995,11 @@ while [ ${invalid_answer} == true ]; do
     #"db_mysql outbound websocket tls"
     echo
     if [ "$debug_mode" == "true" ];then echo "debug: make cfg";fi
-    make include_modules="db_mysql outbound websocket tls" cfg
+    if [ $distro =~ 'NOmysql' ]; then 
+       make include_modules="outbound websocket tls" cfg
+    else
+       make include_modules="db_mysql outbound websocket tls" cfg
+    fi 
     #make include_modules="outbound websocket tls" cfg
 
     echo
@@ -1077,7 +1086,8 @@ done
 echo
 #ask user if they want to run a media proxy (rtpengine)
 print_message "Info" "You will now be prompted to install a Media Proxy (rtpengine)"
-print_message "Info" "With a Media Proxy, no RTP traffic will flow between Asterisk and the UAC"
+print_message "Info" "With a Media Proxy, no RTP traffic will flow between Asterisk and the UA"
+print_message "Notify" "rtpengine is OS and kernel specific, in particular ffmpeg."
 read -p "Would you like to install a Media Proxy (rtpengine) for Kamailio and Asterisk? [Y/N]" install_media_proxy
 if [ -z $install_media_proxy ] || ([ "$install_media_proxy" == "Y" ] || [ "$install_media_proxy" == "y" ]) ; then
    check_is_service_available "rtpengine"
@@ -1095,22 +1105,75 @@ if [ -z $install_media_proxy ] || ([ "$install_media_proxy" == "Y" ] || [ "$inst
          print_message "Info" "Using git rtpengine.tar"
          yum install perl-IPC-Cmd -y
          cd /usr/local/src
-         git clone https://github.com/sipwise/rtpengine.git
+         if [[ $distro =~ 'Amazon' ]]; then
+            sudo -E wget https://github.com/sipwise/rtpengine/archive/mr4.4.1.1.tar.gz
+            tar -xzvf mr4.4.1.1.tar.gz
+            mv -f rtpengine-mr4.4.1.1 rtpengine
+         else
+            git clone https://github.com/sipwise/rtpengine.git
+         fi
          #git clean -f -x -d
       fi
-      cd /usr/local/src/rtpengine/daemon 
+
       #rpm -Uvh http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm
       yum -y install epel-release && rpm -Uvh http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm
       export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin:/usr/local/sbin:usr/local/bin:/usr/lib64
       yum install spandsp-devel spandsp
       yum install perl-CPAN
-      yum install -y ffmpeg ffmpeg-devel
-      #yum install -y ffmpeg ffmpeg-devel.x86_64
+
+      #TODO compile gperf manually for systems that have yum security issues
+      #Install gperf (used by rtpengine)
+      echo "Checking gperf status"
+      which gperf > /dev/null 2>&1
+      if [ $? -eq 1 ]; then
+         print_message "Info" "Installing gperf"
+         if [ "$debug_mode" == "true" ]; then
+            sudo yum install -y gperf
+         else
+            sudo yum install -y gperf >/dev/null
+         fi
+         if [ $? -eq 0 ]; then
+            print_message "Success" "gperf was installed"
+            echo
+         else
+            print_message "Error" "gperf was not installed"
+            print_message "Info" "Consider compiling gperf manually on this system, gperf zip is included"
+            echo
+         fi
+      else
+         print_message "Notify" "gperf was already installed"
+         echo
+      fi
+
+      #Some distro's require ffmpeg to be compiled and shared libraries enabled inorder to obtain correct libraries
+      #Note: If you compile with h264 enabled => h264 is not free
+      if [[ $distro =~ 'Amazon' ]]; then
+         print_message "Info" "Amazon Linux requires ffmpeg to be compiled to obtain correct binaries"
+         cd $SCRIPT_HOME
+         cp ffmpeg-2.8.16.tar.gz /opt
+         cd /opt
+         tar -xzvf ffmpeg-2.8.16.tar.gz
+         cd /opt/ffmpeg-2.8.16
+         ./configure --enable-shared
+         make
+         make install        
+         cp /usr/local/lib/libavcodec.so.56.60.100 /lib64
+         cd /lib64
+         ln -s libavcodec.so.56.60.100 libavcodec.so.56
+         cd /usr/local/src/rtpengine/daemon
+      else
+         yum install -y ffmpeg ffmpeg-devel
+         #yum install -y ffmpeg ffmpeg-devel.x86_64
+      fi
+
       yum install -y hiredis-devel
+
+      cd /usr/local/src/rtpengine/daemon 
       if [ "$debug_mode" == "true" ];then echo "debug: make rtpengine";fi
       make
       if [ "$debug_mode" == "true" ];then echo "debug: rtpengine make complete";fi
       cp rtpengine /usr/local/bin/
+
       cd /usr/local/src/rtpengine/kernel-module 
       if [ "$debug_mode" == "true" ];then echo "debug: make kernel-module";fi
       make 
